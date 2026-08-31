@@ -1,10 +1,14 @@
 import telebot
 import requests
+from datetime import date
 
 TOKEN = "8843530947:AAEkY0moctJyqY-T6chUSEDGJMrR-9ffiC4"
 GROQ_API_KEY = "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"
 
 bot = telebot.TeleBot(TOKEN)
+
+# قاموس لتتبع عدد أسئلة المستخدمين
+user_usage = {}
 
 def get_available_models():
     url = "https://api.groq.com/openai/v1/models"
@@ -58,13 +62,34 @@ def ask_groq(prompt_text):
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
-    bot.reply_to(message, "أهلاً بك! 👋 أنا بوت الذكاء الاصطناعي، اسألني أي سؤال وسيتم الرد عليك فوراً.")
+    bot.reply_to(message, "أهلاً بك! 👋 أنا بوت الذكاء الاصطناعي. لديك 5 أسئلة مجانية يومياً، تفضل بطرح سؤالك.")
 
 @bot.message_handler(func=lambda message: True)
 def answer_anything(message):
+    user_id = message.from_user.id
+    today = str(date.today())
+
+    # تهيئة بيانات المستخدم للترسيت اليومي
+    if user_id not in user_usage or user_usage[user_id]['date'] != today:
+        user_usage[user_id] = {'count': 0, 'date': today}
+
+    # التحقق من تجاوز الحد المسموح
+    if user_usage[user_id]['count'] >= 5:
+        msg = (
+            "⚠️ **عذراً، لقد استهلكت حدك اليومي المجاني (5 أسئلة)!**\n\n"
+            "للاشتراك المفتوح بدون حدود، يرجى التواصل مع المطور للتفعيل."
+        )
+        bot.reply_to(message, msg, parse_mode="Markdown")
+        return
+
+    # زيادة العداد وإرسال الإجابة
+    user_usage[user_id]['count'] += 1
+    remains = 5 - user_usage[user_id]['count']
+    
     bot.send_chat_action(message.chat.id, 'typing')
     reply = ask_groq(message.text)
-    bot.reply_to(message, reply)
+    
+    full_reply = f"{reply}\n\n*📊 متبقي لك اليوم: {remains} أسئلة.*"
+    bot.reply_to(message, full_reply, parse_mode="Markdown")
 
 bot.infinity_polling(skip_pending=True)
-  
